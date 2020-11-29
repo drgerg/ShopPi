@@ -1,0 +1,17 @@
+[Unit]
+Description=Shop SQL Stats Recorder  shopSQL.service
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/Your_User/shop/shopSQL.py
+WorkingDirectory=/home/Your_User/shop/
+StandardOutput=syslog
+StandardError=syslog
+User=greg
+#Group=www-data
+Group=pi
+ExecStop = /bin/kill -2 $MAINPID
+
+[Install]
+WantedBy=multi-user.target

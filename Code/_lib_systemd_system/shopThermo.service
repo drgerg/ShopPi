@@ -1,0 +1,18 @@
+[Unit]
+Description=Shop Stats and Controls  shopApp.service
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/Your_User/shop/thermostat.py
+#ExecStart=/usr/local/bin/gunicorn --bind=unix:/home/greg/shop/gunicorn.sock --threads=4 shopApp:app
+WorkingDirectory=/home/Your_User/shop/
+StandardOutput=syslog
+StandardError=syslog
+User=greg
+#Group=www-data
+Group=pi
+ExecStop = /bin/kill -2 $MAINPID
+
+[Install]
+WantedBy=multi-user.target

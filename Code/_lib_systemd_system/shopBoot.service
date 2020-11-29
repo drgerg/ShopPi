@@ -1,0 +1,19 @@
+[Unit]
+Description=Sanders Pi ReBoot on demand handler
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/Your_User/shop/PiBoot.py
+WorkingDirectory=/home/Your_User/shop/
+StandardOutput=syslog
+StandardError=syslog
+User=root
+Group=root
+#ExecStop = /bin/kill -2 $MAINPID
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target

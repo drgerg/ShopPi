@@ -1,0 +1,16 @@
+[Unit]
+Description=Shop Socket Host - socketHost.service
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/Your_User/shop/socketHost.py
+WorkingDirectory=/home/Your_User/shop/
+StandardOutput=syslog
+StandardError=syslog
+User=greg
+Group=pi
+ExecStop = /bin/kill -2 $MAINPID
+
+[Install]
+WantedBy=multi-user.target
