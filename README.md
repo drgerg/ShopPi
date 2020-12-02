@@ -8,3 +8,5 @@ I used an early Pi B+ and a Elegoo 8-relay board along with a DS18B20 W1 temp pr
 I learned it's a lot more difficult writing software to control cooling and heating of a room than I thought.  Honestly, I'm not sure I've done a very good job of it, but the window unit works, and 'thermostat.py' does it's job.  
 
 I am planning to make substantive improvements, and consider this to be in the 'alpha' stages of development at this time (Dec 2020).
+
+I have a separate relay-controlled electric space heater that I use to heat the shop.  ShopPi is currently hooked up in parallel with a standard cheap analog thermostat.  The analog thermostat is still running the heater because the code for the heating section is still not done.  More on that later.
