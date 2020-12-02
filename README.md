@@ -1,7 +1,7 @@
 # ShopPi
  ### Shop Environmental Controls and Sensors
 
-This is the newest node in my little PiNet.  It's also the least finished of the group. You might think it's ugly, and you'd be mostly right.  I have not intention of caring how it looks, only how it works.
+This is the newest node in my little PiNet.  It's also the least finished of the group. You might think it's ugly, and you'd be mostly right.  I have no intention of caring how it looks, only how it works.
 
 I used an early Pi B+ and a Elegoo 8-relay board along with a DS18B20 W1 temp probe and a BME280 for sensors.  The BME280 is the primary sensor, the W1 probe is zip tied to the front grill of the window unit and can act as a comparison temperature source.
 
