@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # thermostat.py - DIY Heat/AC controller.
-# Copyright (c) 2019,2020 - Gregory Allen Sanders.
+# Copyright (c) 2019,2020,2021 - Gregory Allen Sanders.
 
 #     This program is free software: you can redistribute it and/or modify
 #     it under the terms of the GNU General Public License as published by
@@ -33,14 +33,14 @@ thermoHome = os.path.abspath(os.path.dirname(__file__))
 ####               CurrentState.pkl contains a dictionary named 'Tpins' which is made by OrderedDict()
 ####               from the normal dictionary named 'pins'. OrderedDict() gives us a sorted dictionary.
 ##
-# We need to retrieve 'Tpins'. It either exists in 'CurrentState.pkl' or we have to create it from scratch.
+# We need a dictionary called 'Tpins'. It either exists in 'CurrentState.pkl' or we have to create it from scratch.
 # If CurrentState.pkl exists, load it and extract the Tpins dictionary from it.
 if os.path.isfile(thermoHome + '/CurrentState.pkl'):
     try:
         with open(thermoHome + '/CurrentState.pkl', 'rb') as pinPik:
             Tpins = pickle.load(pinPik)
     except EOFError:
-        logger.info("In main(). Encountered an empty .pkl file.  Moving on without it.")
+        logger.debug("In main(). Encountered an empty .pkl file.  Moving on without it.")
         os.remove(thermoHome + '/CurrentState.pkl')
         os.system('cp ' + thermoHome + '/InitialTpins.pkl ' + thermoHome + '/CurrentState.pkl')
         pass
@@ -48,17 +48,22 @@ else:
     os.system('cp ' + thermoHome + '/InitialTpins.pkl ' + thermoHome + '/CurrentState.pkl')
     with open(thermoHome + '/CurrentState.pkl', 'rb') as pinPik:
         Tpins = pickle.load(pinPik)
-#  Now we have our dictionary 'Tpins'.
-### NOW actually use the contents of 'Tpins' to set the GPIO pins.
+#
+### NOW actually use the contents of the dictionary 'Tpins' to set the GPIO pins.
 #
 # To initialize the hardware to an 'Off' state, set each pin as an output and make it HIGH (HIGH = off):
 for pin in Tpins:
     GPIO.setup(pin, Tpins[pin]['I-O'])
     GPIO.output(pin, Tpins[pin]['state'])
-
+#
+# Tpar is a dictionary that holds all of our working variables. As a dictionary, it's a 'keyword:value' pair
+# file format. We'll use this to carry these variables around from place to place as 'kwargs'.
+# Tpar is saved to disk in the 'thermParms.pkl' file.  The next two lines read that into memory.
 with open(thermoHome + '/thermParms.pkl', 'rb') as tpmR:
     Tpar = pickle.load(tpmR)
-
+#
+# showStatus() does what the name implies, it gathers info about the current state of affairs and 
+# puts it in the log file as well as printing it to stdout.
 def showStatus():
     tempC,probeTemp = shopSQL.getTemp('Probe1')
     logger = logging.getLogger(__name__)
@@ -67,9 +72,8 @@ def showStatus():
             with open(thermoHome + '/CurrentState.pkl', 'rb') as pinPik:
                 Tpins = pickle.load(pinPik)
         except EOFError:
-            logger.info("In main(). Encountered an empty .pkl file.  Moving on without it.")
+            logger.debug("In main(). Encountered an empty .pkl file.  Moving on without it.")
             os.remove(thermoHome + '/CurrentState.pkl')
-            #print('The empty .pkl file should be gone now.')
             pass
     for pin in Tpins:
         status = GPIO.input(pin)
@@ -77,13 +81,13 @@ def showStatus():
             statStr = 'Off'
         if status == 0:
             statStr = 'On'
-        logger.info('Pin ' + str(pin) + ' ' + str(Tpins[pin]['name']) + ' is ' + statStr)
+        logger.debug('Pin ' + str(pin) + ' ' + str(Tpins[pin]['name']) + ' is ' + statStr)
         print('Pin ' + str(pin) + ' ' + str(Tpins[pin]['name']) + ' is ' + statStr)
-    logger.info(probeTemp)
+    logger.debug(probeTemp)
     print(probeTemp)
-    #print('Bottom of showStatus()')
-    # return Tpins
-
+#
+# newStat() is called when we want to change the status of outputs on the GPIO header.
+#
 def newStat(changePin, action):
     thermoHome = os.path.abspath(os.path.dirname(__file__))
     logger = logging.getLogger(__name__)
@@ -91,9 +95,8 @@ def newStat(changePin, action):
         try:
             with open(thermoHome + '/CurrentState.pkl', 'rb') as pinPik:
                 Tpins = pickle.load(pinPik)
-            # Tpins = pickle.load(open(thermoHome + '/CurrentState.pkl', 'rb'))
         except EOFError:
-            logger.info("In newStat(). Encountered an empty .pkl file.  Moving on without it.")
+            logger.debug("In newStat(). Encountered an empty .pkl file.  Moving on without it.")
             os.remove(thermoHome + '/CurrentState.pkl') 
             pass
     # Convert the pin into an integer:
@@ -124,11 +127,11 @@ def newStat(changePin, action):
             GPIO.output(22, GPIO.HIGH)
             GPIO.output(23, GPIO.HIGH)
             GPIO.output(25, GPIO.LOW)
-        if changePin == 24:  # Power 
+        if changePin == 24:  # Power (VCC for airconditioner internal circuits)
             GPIO.output(24, GPIO.LOW)
         message = "Turned " + deviceName + " on."
 
-    if action == "off":                 ## Put everything in a Off state.
+    if action == "off":      ## Put everything in a Off state.
         if changePin == 24:
             GPIO.output(5, GPIO.HIGH)
             GPIO.output(18, GPIO.HIGH)
@@ -144,114 +147,156 @@ def newStat(changePin, action):
     # For each pin, read the pin state and store it in the pins dictionary:
     for pin in Tpins:
         Tpins[pin]['state'] = GPIO.input(pin)
-    logger.info('Pin ' + str(changePin) + ' ' + deviceName + ' ' + action)
+    logger.debug('Pin ' + str(changePin) + ' ' + deviceName + ' ' + action)
     with open(thermoHome + '/CurrentState.pkl', 'wb+') as pinPikW:
         pickle.dump(Tpins, pinPikW, pickle.HIGHEST_PROTOCOL)
-    # pickle.dump(Tpins, open(thermoHome + '/CurrentState.pkl', 'wb'), pickle.HIGHEST_PROTOCOL)
+    logger.debug(message)
     return message
 
+
 def shopEnv(semode,**Tpar):
+    thermoHome = os.path.abspath(os.path.dirname(__file__))
+    logger = logging.getLogger(__name__)
     with open(thermoHome + '/thermParms.pkl', 'rb') as tpmR:
         Tpar = pickle.load(tpmR)
-    #print(Tpar['SEMode'])
-    #print(Tpar['SETemp'])
-    #print(Tpar['SEFan'])
+    curSEM = (Tpar['SEMode'])
+    logger.debug('Into shopEnv() with a current SEMode value of: ' + str(curSEM) + '. semode comes here as: ' + semode)
+    # if curSEM != semode:
+    if semode == 'cool':
+        setCoolMode(**Tpar)
+    if semode == 'off':
+        setOffMode(**Tpar)
+    if semode == 'dehum':
+        setDehumMode(**Tpar)
+    if semode == 'fan':
+        setFanMode(3)
+    if semode == 'heat':
+        setHeatMode(**Tpar)
     Tpar['SEMode'] = semode
-    # if str(setemp) != '-':
-    #     Tpar['SETemp'] = str(setemp)
-    # if str(sefan) != '-'
-    #     Tpar['SEFan'] = str(sefan)
-    with open(thermoHome + '/thermParms.pkl', 'wb+') as tpmW:
-        pickle.dump(Tpar, tpmW, pickle.HIGHEST_PROTOCOL)
-    newSEM = (Tpar['SEMode'])
-    print(newSEM)
-    if newSEM != semode:
-        if newSEM == 'cool':
-            setCoolMode()
-        if newSEM == 'off':
-            setOffMode()
-        if newSEM == 'heat':
-            setHeatMode()
-        if newSEM == 'dehum':
-            setDehumMode()
-        if newSEM == 'fan':
-            setFanMode(3)
-        if newSEM == 'heat':
-            setHeatMode()
-            logger.info("shopEnv function called setHeatMode().")
     newSET = (Tpar['SETemp'])
     newSEF = (Tpar['SEFan'])
+    newSEM = Tpar['SEMode']
     # 
+    with open(thermoHome + '/thermParms.pkl', 'wb+') as tpmW:
+        pickle.dump(Tpar, tpmW, pickle.HIGHEST_PROTOCOL)
     retStr = 'shopEnv() updated settings. Mode: ' + newSEM + ' Temp: ' + str(newSET) + ' Fan: ' + str(newSEF) + '.'
+    logger.debug(retStr)
     return retStr
 
-##    CONTINUOUS LOOP CHECKING TEMP EVERY 10 SECONDS
-##    AND THREADED TRIGGERING CHANGES BASED ON RESULTS.
+##    CONTINUOUS LOOP THAT CHECKS TEMPERATURE EVERY 10 SECONDS
+##    AND TRIGGERS CHANGES BASED ON RESULTS.
 ##    The variables are: SE and ST followed by a operational term 'Mode, Temp, Fan'.
-##    SEMode is 'Shop Environment Mode'. It is what the user called for.
-##    STMode is 'STatus - Mode'.  It shows what is active currently.
+##    SEMode is 'Shop Environment Mode'. It is what the user called for. This stays constant until another mode is selected.
+##    STMode is 'STatus - Mode'.  It shows what is active currently. This changes based on the actual status of the moment.
 #
 def readTempLoop(**Tpar):
     stopLoop = 0
     while stopLoop == 0:
-        # Retrieve our variables from the pickle file.  They are stored in a dictionary called Tpar.
+        # Get the Tpar dictionary from thermParms.pkl
         with open(thermoHome + '/thermParms.pkl', 'rb') as tpmR:
             Tpar = pickle.load(tpmR)
-        # print(Tpar)
-        SEModeL, STModeL = Tpar['SEMode'], Tpar['STMode']  
-        # The 'L' added to the variable means it is a Local variant of the named variable.
-        # We'll use these L variants to mess with, then add them to the dictionary 'Tpar' later. 
+        logger.debug('Top of readTempLoop. \nTpar value: ' + str(Tpar))
+        # Set up some local variables based on the contents of the Tpar dictionary
+        SEModeL, STModeL = Tpar['SEMode'], Tpar['STMode']
         SETempL, STTempL = float(Tpar['SETemp']), float(Tpar['STTemp'])
-        # First thing: If the user has asked for 'off' Mode, set the L variant to 'off'.
+        # If the SEt Mode variable is 'off' and the STatus Mode variable is NOT 'off', make it 'off.
         if SEModeL == 'off' and STModeL != 'off':
             STModeL = 'off'
-            print('Set STModeL to off')
-        print('SEModeL: ' + SEModeL + ' SETempL: ' + str(SETempL) + ' STModeL: ' + STModeL + ' STTempL: ' + str(STTempL) + '.')
+        logger.debug('First Stats. SEModeL: ' + SEModeL + '. SETempL: ' + str(SETempL) + '. STModeL: ' + STModeL + '. STTempL: ' + str(STTempL) + '.')
+        # Get Temperature, Pressure and Humidity from the BME280 sensor
         bmeTemp,bmepres,bmeHum,bmeXtraHum = bme280.readBME280All()
-        #print('temp retrieved')
+        # Put the BME280 values into human-useable form.
         tempF = float('{:.2f}'.format(float(9/5 * bmeTemp + 32.00)))
         humid = float('{:.2f}'.format(float(bmeHum)))
-        #print('format conversions done')
-        # The following three 'if' statements check for three things:
-            # 1) The user asked for 'off' and our L variant Mode is 'off',
-            # 2) The user asked for 'cool' and our L variant Mode is 'cool' AND the temp is 
-            #  less than or equal to what the user asked for.
-            # 3) 
-        if tempF >= SETempL and SEModeL == 'cool' and STModeL != 'cool':
-            print(' . . . caught by first if . . . ')
-            if STTempL != SETempL - 3:
+        logger.debug('Initial loop temperature TempF: ' + str(tempF))
+        #
+        ## COOLING MODE SECTION START
+        #
+        if SEModeL=='cool':
+            logger.debug('SEModeL was "cool" so we came here.')
+            # It's hotter than the SEt temperature, SEt Mode is 'cool', AND STatus Mode is NOT 'cool'.
+            if tempF >= SETempL and SEModeL == 'cool' and STModeL != 'cool':
+                logger.debug(' . . . Cool. Caught by first if . . . ')
+                # Make sure STatus temperature variable is 3 degrees cooler than SEt temp variable.
+                # That then becomes the target temp at which the compressor is turned off.
+                if STTempL != SETempL - 3:
+                    STTempL = SETempL - 3
+                logger.debug('Airconditioner was just turned on. Set Temp: ' + str(SETempL) + ', target temp: ' + str(STTempL))
+                # 
+                # Run setCoolMode() with the Tpar dictionary as keyword arguments (kwargs) and return here.
+                scmVar = setCoolMode(**Tpar)
+                # Update the STatus Mode variable with what returned from setCoolMode(). Hint: it should be 'cool'.
+                Tpar['STMode'] = scmVar
+                # Populate cmSEM variable from Tpar's SEt Mode value.
+                cmSEM = Tpar['SEMode']
+                logger.debug('setCoolMode() set STMode to : ' + scmVar + '. SEMode is: ' + cmSEM + '.')
+                # The end result should be SEMode: 'cool', STMode: 'cool', SETemp is higher than tempF, 
+                # and STTemp is 3 degrees lower than SETemp.
+                # Next time this cycles around, this IF block gets skipped because STMode IS 'cool'.
+            if SEModeL == 'cool' and STTempL!= SETempL - 3:
+                logger.debug(' - - - Cool. Caught by second if - - - ')
+                logger.debug('SETempL: ' + str(SETempL) + ' STTempL: ' + str(STTempL))
                 STTempL = SETempL - 3
-            logger.info('Airconditioner was just turned on. Set Temp: ' + str(SETempL) + ', target temp: ' + str(STTempL))
-            Tpar['SEMode'], Tpar['STMode'] = SEModeL, STModeL
-            Tpar['SETemp'], Tpar['STTemp'] = str(SETempL), str(STTempL)
-            #print('dictionary updated')
-            # scmthrd = threading.Thread(target=setCoolMode,kwargs=Tpar)
-            # scmthrd.start()
-            print('Running setCoolMode.')
-            scmVar = setCoolMode(**Tpar)
-            Tpar['STMode'] = scmVar
-            cmSEM = Tpar['SEMode']
-            print('setCoolMode() set SEMode to : ' + cmSEM + '.')
-        if SEModeL == 'cool' and STTempL!= SETempL - 3:
-            print(' - - - Caught by second if - - - ')
-            #print('SETempL: ' + str(SETempL) + ' STTempL: ' + str(STTempL))
-            STTempL = SETempL - 3
-            Tpar['STTemp'] = str(STTempL)
-            #print('STTemp updated in Tpar')
-        if tempF <= STTempL and SEModeL == 'cool' and STModeL == 'cool':
-            print(' + + + caught by third if + + + ')
-            if SETempL != STTempL + 3:
-                SETempL = STTempL + 3
-                Tpar['SETemp'] = str(SETempL)
-            # SEModeL = 'off'
-            STModeL = 'off'
-            logger.info('Airconditioner is being turned off. Set Temp: ' + str(SETempL) + ', target temp: ' + str(STTempL))
-            Tpar['SEMode'], Tpar['STMode'] = SEModeL, STModeL
-            Tpar['SETemp'], Tpar['STTemp'] = str(SETempL), str(STTempL)
-            print('Running setOffMode().')
-            Tpar = setOffMode(**Tpar)
-        with open(thermoHome + '/thermParms.pkl', 'wb+') as tpmW:
-            pickle.dump(Tpar, tpmW, pickle.HIGHEST_PROTOCOL)
+                Tpar['STTemp'] = str(STTempL)
+
+            if tempF <= STTempL and SEModeL == 'cool' and STModeL == 'cool':
+                logger.debug(' + + + Cool. Caught by third if + + + ')
+                if SETempL != STTempL + 3:
+                    SETempL = STTempL + 3
+                    Tpar['SETemp'] = str(SETempL)
+                STModeL = 'off'
+                logger.debug('Airconditioner is being turned off. Set Temp: ' + str(SETempL) + ', target temp: ' + str(STTempL))
+                Tpar['SEMode'], Tpar['STMode'] = SEModeL, STModeL
+                Tpar['SETemp'], Tpar['STTemp'] = str(SETempL), str(STTempL)
+                Tpar = setOffMode(**Tpar)
+
+            if tempF <= STTempL and SEModeL == 'cool' and STModeL != 'cool':
+                logger.debug(' + + + Cool. Caught by fourth if + + + \nSEModeL is cool, STModeL is NOT cool.')
+                if SETempL != STTempL + 3:
+                    SETempL = STTempL + 3
+                    Tpar['SETemp'] = str(SETempL)
+                logger.debug('Airconditioner is off, but mode is cool. Set Temp: ' + str(SETempL) + ', target temp: ' + str(STTempL))
+                Tpar['SEMode'], Tpar['STMode'] = SEModeL, STModeL
+                Tpar['SETemp'], Tpar['STTemp'] = str(SETempL), str(STTempL)
+                if STModeL != 'off':
+                    Tpar = setOffMode(**Tpar)
+        #
+        ## HEAT MODE SECTION START
+        #
+        if SEModeL == 'heat':
+            logger.debug('SEModeL was "heat" so we came here.')
+            # Check to see if the heater pin is in the wrong state, which can happen after a service restart.
+            if STModeL == 'heat' and GPIO.input(25) == 1:
+                setHeatMode(**Tpar)
+                logger.debug("Caught the heater pin HIGH. Must have been a service restart. Fixed it.")
+            # Now we go on about our normal business of monitoring the temperature and responding.
+            if tempF <= SETempL and SEModeL == 'heat' and STModeL != 'heat':
+                logger.debug(' . . . Heat. Caught by first if . . . ')
+                if STTempL != SETempL + 3:
+                    STTempL = SETempL + 3
+                logger.debug('Heater was just turned on. Set Temp: ' + str(SETempL) + ', target temp: ' + str(STTempL))
+                Tpar['SEMode'], Tpar['STMode'] = SEModeL, STModeL
+                Tpar['SETemp'], Tpar['STTemp'] = str(SETempL), str(STTempL)
+                shmVar = setHeatMode(**Tpar)
+                Tpar['STMode'] = shmVar
+                cmSEM = Tpar['SEMode']
+                logger.debug('setHeatMode() set SEMode to : ' + cmSEM + '.')
+            if SEModeL == 'heat' and STTempL!= SETempL + 3:
+                logger.debug(' - - - Heat. Caught by second if - - - ')
+                STTempL = SETempL + 3
+                Tpar['STTemp'] = str(STTempL)
+                logger.debug('STTemp adjusted upward in Tpar')
+            if tempF >= STTempL and SEModeL == 'heat' and STModeL == 'heat':
+                logger.debug(' + + + Heat. Caught by third if + + + ')
+                if SETempL != STTempL - 3:
+                    SETempL = STTempL - 3
+                    Tpar['SETemp'] = str(SETempL)
+                STModeL = 'off'
+                logger.debug('Heater is being turned off. Set Temp: ' + str(SETempL) + ', target temp: ' + str(STTempL))
+                Tpar['SEMode'], Tpar['STMode'] = SEModeL, STModeL
+                Tpar['SETemp'], Tpar['STTemp'] = str(SETempL), str(STTempL)
+                Tpar = setOffMode(**Tpar)
+
         sleep(10)
 
 #
@@ -259,6 +304,7 @@ def readTempLoop(**Tpar):
 #
 
 def setCoolMode(**Tpar):
+    logger = logging.getLogger(__name__)
     newStat(24,'on')
     newStat(23,'on')
     newStat(5,'on')
@@ -266,31 +312,31 @@ def setCoolMode(**Tpar):
     Tpar['STFan'] = 'on'
     with open(thermoHome + '/thermParms.pkl', 'wb+') as tpmW:
         pickle.dump(Tpar, tpmW, pickle.HIGHEST_PROTOCOL)
-    logger.info('Cool Mode Set.')
+    logger.debug('Cool Mode Set.')
     scmVar = Tpar['STMode']
     return scmVar
 
 def setHeatMode(**Tpar):
-    SEMode = Tpar['SEMode']
+    logger = logging.getLogger(__name__)
     newStat(25,'on')
     Tpar['STMode'] = 'heat'
     Tpar['STFan'] = 'off'
     with open(thermoHome + '/thermParms.pkl', 'wb+') as tpmW:
         pickle.dump(Tpar, tpmW, pickle.HIGHEST_PROTOCOL)
-    logger.info('Heat Mode Set.')
-    scmVar = Tpar['STMode']
-    return scmVar
+    logger.debug('Heat Mode Set.')
+    logger.debug(str(Tpar))
+    shmVar = Tpar['STMode']
+    return shmVar
 
-def setDehumMode():
+def setDehumMode(**Tpar):
     SEMode = Tpar['SEMode']
 
 def setOffMode(**Tpar):
     logger = logging.getLogger(__name__)
-    with open(thermoHome + '/thermParms.pkl', 'rb') as tpmR:
-        Tpar = pickle.load(tpmR)
     SEMode = Tpar['SEMode']
     STMode = Tpar['STMode']
     SETemp = Tpar['SETemp']
+    logger.debug('Inside setOffMode(), SETemp is: ' + str(SETemp))
     SEFan = Tpar['SEFan']
     if SEMode == 'off':
         newStat(24,'off')
@@ -305,10 +351,19 @@ def setOffMode(**Tpar):
         Tpar['SEMode'] = 'cool'
         Tpar['STMode'] = 'off'
         Tpar['SEFan'] = 0
+    if SEMode == 'heat':
+        newStat(25,'off')
+        Tpar['SEMode'] = 'heat'
+        Tpar['STMode'] = 'off'
+        Tpar['SEFan'] = 0
+    SEMode = Tpar['SEMode']
+    STMode = Tpar['STMode']
+    SETemp = Tpar['SETemp']
+    SEFan = Tpar['SEFan']
     with open(thermoHome + '/thermParms.pkl', 'wb+') as tpmW:
         pickle.dump(Tpar, tpmW, pickle.HIGHEST_PROTOCOL)
     sleep(2)
-    logger.info('SetOffMode() - SEMode: ' + str(SEMode) + ' SETemp: ' + str(SETemp) + ' SEFan: ' + str(SEFan))
+    logger.debug('SetOffMode() - SEMode: ' + str(SEMode) + '. STMode: ' + str(STMode) + '. SETemp: ' + str(SETemp) + '. SEFan: ' + str(SEFan))
     return Tpar
 
 
@@ -316,7 +371,7 @@ def setTemp(setemp,**Tpar):
     logger = logging.getLogger(__name__)
     with open(thermoHome + '/thermParms.pkl', 'rb') as tpmR:
         Tpar = pickle.load(tpmR)
-    logger.info('Changing Temp setting from: ' + Tpar['SETemp'] + ' to ' + str(setemp) + '.')
+    logger.debug('Changing Temp setting from: ' + Tpar['SETemp'] + ' to ' + str(setemp) + '.')
     #print(Tpar['SETemp'])
     Tpar['SETemp'] = str(setemp)
     with open(thermoHome + '/thermParms.pkl', 'wb+') as tpmW:
@@ -347,13 +402,9 @@ def setFanMode(SEFan,**Tpar):
         Tpar['STFan'] = 3
     with open(thermoHome + '/thermParms.pkl', 'wb+') as tpmW:
         pickle.dump(Tpar, tpmW, pickle.HIGHEST_PROTOCOL)
-    # return SEFanStat
 #
 ##   END ONE-OFF SHOT FUNCTIONS   ##
 #
-##
-### END BLOCK OF COPY/PASTE CODE FROM POOLPI
-##
 #
 ### - Main body of code ends here.
 #
@@ -381,31 +432,28 @@ if __name__ == "__main__":
         def SignalHandler(signal, frame):
             if signal == 2:
                 sigStr = 'CTRL-C'
-                logger.info(' - - - - - -  thermostat.py - ' + sigStr + ' caught. - - - - - - ')
-            #print("SignalHandler invoked")
-            Tpar = {'SEMode':'off', 'SETemp':'80', 'SEFan':'0', 'STMode':'off', 'STTemp':'80', 'STFan':'0'}
+                logger.debug(' - - - - - -  thermostat.py - ' + sigStr + ' caught. - - - - - - ')
+            with open(thermoHome + '/thermParms.pkl', 'rb') as tpmR:
+                Tpar = pickle.load(tpmR)
             setOffMode(**Tpar)
             with open(thermoHome + '/thermParms.pkl', 'wb+') as tpmW:
                 pickle.dump(Tpar, tpmW, pickle.HIGHEST_PROTOCOL)
-            logger.info("Shutting down gracefully")
+            logger.debug("Shutting down gracefully")
             logger.debug("Wrote to log in SignalHandler")
-            logger.info("That's all folks.  Goodbye")
-            logger.info(" - - - - thermostat.py DATA LOGGING STOPPED BY DESIGN - - - - ")
+            logger.debug("That's all folks.  Goodbye")
+            logger.debug(" - - - - thermostat.py DATA LOGGING STOPPED BY DESIGN - - - - ")
             logging.shutdown()
             sys.exit(0)
     
         signal.signal(signal.SIGINT, SignalHandler)  ## This one catches CTRL-C from the local keyboard
         signal.signal(signal.SIGTERM, SignalHandler) ## This one catches the Terminate signal from the system    
         logger.debug("Top of try")
-        # while True:
-        logger.info(" - - - - thermostat.py DATA LOGGING STARTED - - - - ")
-        # with open(thermoHome + '/thermParms.pkl', 'rb') as tpmR:
-        #     Tpar = pickle.load(tpmR)
+        logger.debug(" - - - - thermostat.py DATA LOGGING STARTED - - - - ")
         readTempLoop(**Tpar)
 
     except Exception:
-        logger.info("Exception caught at bottom of try.", exc_info=True)
+        logger.debug("Exception caught at bottom of try.", exc_info=True)
         error = traceback.print_exc()
-        logger.info(error)
-        logger.info("That's all folks.  Goodbye")
-        logger.info(" - - - -thermostat.py DATA LOGGING STOPPED BY EXCEPTION - - - - ")
+        logger.debug(error)
+        logger.debug("That's all folks.  Goodbye")
+        logger.debug(" - - - -thermostat.py DATA LOGGING STOPPED BY EXCEPTION - - - - ")

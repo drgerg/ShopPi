@@ -1,5 +1,23 @@
 #!/usr/bin/env python3
+#
+# socketHost.py
+#
+# Cobbled together by Greg Sanders 2020 to be handle interrogation of the ShopPi system.
+#
+#     Copyright (c) 2019,2020 - Gregory Allen Sanders.
 
+#     This program is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+
+#     This program is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+
+#    You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import socket,os,sys,traceback,ast,logging,signal,configparser,pickle,shopSQL,thermostat
 from time import sleep
@@ -11,7 +29,7 @@ def main():
     port = 64444
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
+    thermoHome = os.path.abspath(os.path.dirname(__file__))
     try:
         s.bind((host, port))
     except socket.error as e:
@@ -50,20 +68,25 @@ def main():
                 newTrtn = thermostat.setTemp(newTemp)
                 packet = pickle.dumps(newTrtn)
                 conn.sendall(packet)
-                print('Sent newTemp confirmation.')
-
+                logger.info('Sent newTemp confirmation.')
+##  HEAT
+            if InCmd == 'heat':
+                shStat = os.system('/home/greg/shop/thermSet.py -s0 -m heat ')
+                logger.info('thermSet.py returned: ' + str(shStat))
+                logger.info('From socketHost.py: ' + str(shStat))
 ##  COOL
             if InCmd == 'cool':
                 shStat = os.system('/home/greg/shop/thermSet.py -s1 -m cool ')
                 logger.info('thermSet.py returned: ' + str(shStat))
-                print('From socketHost.py: ' + str(shStat))
+                logger.info('From socketHost.py: ' + str(shStat))
 ##  OFF
             if InCmd == 'off':
                 shStat = os.system('/home/greg/shop/thermSet.py -m off -c0 -f0 -s0')
-                Tpar = thermostat.setOffMode()
+                with open(thermoHome + '/thermParms.pkl', 'rb') as tpmR:
+                    Tpar = pickle.load(tpmR)
+                Tpar = thermostat.setOffMode(**Tpar)
                 shStat = Tpar['SEMode']
                 logger.info('setOffMode() returned: ' + str(shStat))
-                print('From socketHost.py: ' + str(shStat))
 ##  SEND PINS
             if InCmd == 'sendPins':
                 print('Received request for Pins.')
@@ -71,7 +94,7 @@ def main():
                 with open(Pins, 'rb') as sendPins:
                     packet = sendPins.read(2048)
                     conn.sendall(packet)
-                print('Sent CurrentState.pkl')
+                logger.info('Sent CurrentState.pkl')
 ##  THERMPARMS
             if InCmd == 'thermParms':
                 print('Received request for Tpar contents.')
@@ -79,7 +102,7 @@ def main():
                 with open(Tpar, 'rb') as sendTpar:
                     packet = sendTpar.read(2048)
                     conn.sendall(packet)
-                print('Sent thermParms.pkl')
+                logger.info('Sent thermParms.pkl')
 ##  SHOPENV
             if InCmd == 'shopEnv':
                 print('Received request for environmental stats.')
@@ -88,11 +111,11 @@ def main():
                 print(shopEnvStats)
                 packet = pickle.dumps(shopEnvStats)
                 conn.sendall(packet)
-                print('Sent shop environment stats.')
+                logger.info('Sent shop environment stats.')
             try:
                 conn.shutdown(1)
                 conn.close()
-                print('Connection from ' + str(addr[0]) + ' closed.')
+                logger.info('Connection from ' + str(addr[0]) + ' closed.')
                 break
             # except Exception:
             #     traceback.print_exc(file=sys.stdout)
@@ -104,7 +127,7 @@ def main():
                 try:
                     conn.shutdown(1)
                     conn.close()
-                    print('Connection closed.')
+                    logger.info('Connection closed.')
                     break
                 # except Exception:
                     # traceback.print_exc(file=sys.stdout)
