@@ -9,4 +9,4 @@ I learned it's a lot more difficult writing software to control cooling and heat
 
 I am planning to make substantive improvements, and consider this to be in the 'alpha' stages of development at this time (Dec 2020).
 
-I have a separate relay-controlled electric space heater that I use to heat the shop.  ShopPi is currently hooked up in parallel with a standard cheap analog thermostat.  The analog thermostat is still running the heater because the code for the heating section is still not done.  More on that later.
+I have a separate relay-controlled electric space heater that I use to heat the shop.  ShopPi's relay board is hooked up in parallel with a standard cheap analog thermostat.  The analog thermostat now acts as a high temp safety. It's set for about 80F, so if ShopPi fails to turn the space heater off, the bimetal thermo will turn it off. It's a good backup to have.
